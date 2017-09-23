@@ -12,7 +12,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.cavariux.twitchirc.Chat.Channel;
+import com.cavariux.twitchirc.Chat.Message;
 import com.cavariux.twitchirc.Chat.User;
+import sun.rmi.runtime.Log;
 
 /**
  * The main object to start making your bot
@@ -31,10 +33,11 @@ public class TwitchBot {
 	private BufferedWriter writer;
 	private BufferedReader reader;
 	private ArrayList<String> channels = new ArrayList<String>();
-	private String version = "v1.0-Beta";
+	private String version = "v1.2-Beta";
 	private boolean stopped = true;
 	private String commandTrigger = "!";
 	private String clientID = "";
+	private Boolean logPingPong = false;
 
 	private static final Logger LOGGER = Logger.getLogger(TwitchBot.class.getName());
 	
@@ -53,7 +56,7 @@ public class TwitchBot {
 	}
 	
 	/**
-	 * The connect method alouds you to connect to the IRC servers on twitch
+	 * The connect method allows you to connect to the IRC servers on twitch
 	 * @param ip The ip of the Chat group
 	 * @param port The port of the Chat group
 	 */
@@ -83,6 +86,7 @@ public class TwitchBot {
 			this.writer.write("NICK " + user + "\r\n");
 			this.writer.write("USER " + this.getVersion() + " \r\n");
 			this.writer.write("CAP REQ :twitch.tv/commands \r\n");
+			this.writer.write("CAP REQ :twitch.tv/tags \r\n");
 			this.writer.write("CAP REQ :twitch.tv/membership \r\n");
 			this.writer.flush();
 			
@@ -155,12 +159,21 @@ public class TwitchBot {
 	{
 		
 	}
+
+    /**
+     * This method is called when a message is sent on the Twitch Chat.
+     * @param message raw message class
+     */
+    protected void onMessage(Message message)
+    {
+
+    }
 	
 	/**
 	 * This method is called when a command is sent on the Twitch Chat.
 	 * @param user The user is sent, if you put it on a String it will give you the user's nick
 	 * @param channel The channel where the command was sent
-	 * @param message The command
+	 * @param command The command
 	 */
 	protected void onCommand(User user, Channel channel, String command)
 	{
@@ -246,9 +259,6 @@ public class TwitchBot {
 //		}
 //		LOGGER.log(Level.INFO,"> MSG " + channel + " : " + message);
 //	}
-
-	//<editor-fold desc="Rhodderz Code">
-
     /**
      * Returns the logger for this library.
      * @return Logger
@@ -256,20 +266,6 @@ public class TwitchBot {
     public static Logger getLOGGER() {
         return LOGGER;
     }
-
-    /**
-     * Experimetal, see if we can change the nick of the bot.
-     * @param newNick
-     */
-    public void setNick(String newNick){
-        try {
-            this.writer.write("NICK " + newNick + "\r\n");
-        }catch (IOException ioe){
-
-        }
-    }
-
-    //</editor-fold>
 	
 	/**
 	 * The method to join an IRC channel on Twitch
@@ -317,42 +313,17 @@ public class TwitchBot {
 		stopped = false;
 		try {
 			while ((line = this.reader.readLine( )) != null && !stopped) {
+
 			    if (line.toLowerCase( ).startsWith("ping")) {
-			    	LOGGER.log(Level.INFO,"> PING");
-			        LOGGER.log(Level.INFO,"< PONG " + line.substring(5));
+			    	if(logPingPong) {
+						LOGGER.log(Level.INFO, "> PING");
+						LOGGER.log(Level.INFO, "< PONG " + line.substring(5));
+					}
 			        this.writer.write("PONG " + line.substring(5) + "\r\n");
 			        this.writer.flush();
-			    } else if (line.contains("PRIVMSG"))
-			    {
-			        String str[];
-			        str = line.split("!");
-			        final User msg_user = User.getUser(str[0].substring(1, str[0].length()));
-			        str = line.split(" ");
-			        Channel msg_channel;
-			        msg_channel = Channel.getChannel(str[2], this);
-			        String msg_msg = line.substring((str[0].length() + str[1].length() + str[2].length() + 4), line.length());
-			        LOGGER.log(Level.INFO,"> " + msg_channel + " | " + msg_user + " >> " +  msg_msg);
-			        if (msg_msg.startsWith(commandTrigger))
-			        	onCommand(msg_user, msg_channel, msg_msg.substring(1));
-			        
-			        onMessage(msg_user, msg_channel, msg_msg);
-			    } else if (line.contains(" JOIN ")) {
-			    	String[] p = line.split(" ");
-			    	String[] pd = line.split("!");
-			    	if (p[1].equals("JOIN")) 
-			    		userJoins(User.getUser(pd[0].substring(1)), Channel.getChannel(p[2], this));
-				} else if (line.contains(" PART ")) {
-			    	String[] p = line.split(" ");
-			    	String[] pd = line.split("!");
-			    	if (p[1].equals("PART")) 
-			    		userParts(User.getUser(pd[0].substring(1)), Channel.getChannel(p[2], this));
-				} else if (line.contains(" WHISPER ")) {
-					String[] parts = line.split(":");
-					final User wsp_user = User.getUser(parts[1].split("!")[0]);
-					String message = parts[2];
-					onWhisper(wsp_user, message);
-				} else if (line.startsWith(":tmi.twitch.tv ROOMSTATE")) {
-			    	
+			    }
+                else if (line.contains(":tmi.twitch.tv ROOMSTATE")) {
+
 				} else if (line.startsWith(":tmi.twitch.tv NOTICE"))
 			    {
 			    	String[] parts = line.split(" ");
@@ -379,10 +350,45 @@ public class TwitchBot {
 			    {
 			    	LOGGER.log(Level.INFO,line);
 			    	this.connect();
-			    } else
-			    {
-			        LOGGER.log(Level.INFO,"> " + line);
-			    }
+			    }else if(line.contains(":tmi.twitch.tv USERSTATE")){
+
+                }else if(line.contains(":tmi.twitch.tv CAP * ACK")){
+
+                }else if(line.contains("tmi.twitch.tv 353") ||
+                        line.contains("tmi.twitch.tv 366 ") ||
+                        line.contains(":tmi.twitch.tv 375") ||
+                        line.contains(":tmi.twitch.tv 372") ||
+                        line.contains(":tmi.twitch.tv 376")){
+                    //Twitch's Welcome Message, Bit ugly
+                    LOGGER.log(Level.INFO, line);
+                }else{
+			        try {
+			            if(line.contains("=") || line.contains(";")) {
+                            Message message = new Message(line, this);
+                            switch (message.getRawCommand()) {
+                                case "PRIVMSG":
+                                    onMessage(message);
+                                    if (message.getMessage().startsWith(commandTrigger))
+                                        onCommand(message.getUser(), message.getChannel(), message.getMessage().substring(1));
+                                    else
+                                        onMessage(message.getUser(), message.getChannel(), message.getMessage());
+                                    break;
+                                case "JOIN":
+                                    userJoins(message.getUser(), message.getChannel());
+                                    break;
+                                case "PART":
+                                    userParts(message.getUser(), message.getChannel());
+                                    break;
+                                case "WHISPER":
+                                    onWhisper(message.getUser(), message.getMessage());
+                                    break;
+                            }
+                        }
+                    }catch (IndexOutOfBoundsException ioob){
+                        LOGGER.log(Level.SEVERE, "Line: " + line);
+                        ioob.printStackTrace();
+                    }
+                }
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
@@ -500,5 +506,8 @@ public class TwitchBot {
 	{
 		return "TwitchIRC "+version;
 	}
-	
+
+	public void setLogPingPong(Boolean logPingPong) {
+		this.logPingPong = logPingPong;
+	}
 }
