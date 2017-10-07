@@ -311,6 +311,7 @@ public class TwitchBot {
 		if (isRunning()) return;
 		String line = "";
 		stopped = false;
+
 		try {
 			while ((line = this.reader.readLine( )) != null && !stopped) {
 
